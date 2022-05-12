@@ -47,7 +47,7 @@ The network converges in **36** episodes, and kept stably at the score of ~35.
 
 The score per episode during training:
 
-![](ddpg_score.png)
+![](maddpg_score.png)
 
 ### Demo
 

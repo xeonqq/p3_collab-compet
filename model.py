@@ -59,24 +59,20 @@ class ActorNet(nn.Module):
 
 class CriticNet(nn.Module):
     def __init__(self,
-                 phi_body,
                  critic_body,
                  seed,
                  ):
         super(CriticNet, self).__init__()
         self.seed = torch.manual_seed(seed)
-        self.phi_body = phi_body
         self.critic_body = critic_body
         self.fc_critic = layer_init(nn.Linear(critic_body.feature_dim, 1), 3e-4)
 
         self.critic_params = list(self.critic_body.parameters()) + list(self.fc_critic.parameters())
-        self.phi_params = list(self.phi_body.parameters())
 
         self.to(device)
 
     def forward(self, obs, action):
         xs = torch.cat((obs, action), dim=1)
-        xs = self.phi_body(xs)
         xs = self.critic_body(xs)
         value = self.fc_critic(xs)
         return value

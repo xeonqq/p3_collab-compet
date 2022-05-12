@@ -7,7 +7,7 @@ import torch
 from torch.optim.lr_scheduler import ExponentialLR
 from unityagents import UnityEnvironment
 
-from ddpg_agent import DDPG_Agent
+from multi_agents import MultiAgents
 
 
 def get_next_states(env_info):
@@ -48,21 +48,22 @@ class Environment(object):
         print('Number of actions:', self._action_size)
 
         # examine the state space
-        state = self._env_info.vector_observations[0]
-        print('States look like:', state)
-        self._state_size = len(state)
-        print('States have length:', self._state_size)
-        self._agent = DDPG_Agent(self._state_size, self._action_size)
+        states = self._env_info.vector_observations
+        self._state_size = states.shape[1]
+        print('There are {} agents. Each observes a state with length: {}'.format(states.shape[0], self._state_size))
+        print('The state for the first agent looks like:', states[0])
+        self._multi_agents = MultiAgents(len(self._env_info.agents), self._state_size, self._action_size)
+        self._share_rewards = False
 
     def run_model(self, actor_model, num_episode=3, steps_per_episode=1000):
-        self._agent.load_actor_model(actor_model)
+        self._multi_agents.load_actor_model(actor_model)
         scores = []
         for i in range(num_episode):
             env_info = self._env.reset(train_mode=False)[self._brain_name]
             states = get_next_states(env_info)
             score = 0
             for j in range(steps_per_episode):
-                actions = self._agent.act(states, False, i)
+                actions = self._multi_agents.act(states, False, i)
                 env_info = self._env.step(actions)[self._brain_name]  # send the action to the environment
                 next_states, rewards, dones = get_env_step_results(env_info)
                 score += np.mean(rewards)  # update the score
@@ -77,7 +78,7 @@ class Environment(object):
     def close(self):
         self._env.close()
 
-    def train(self, min_score, n_episodes=150, max_t=1000):
+    def train(self, min_score, n_episodes=3000, max_t=1000):
         """Deep Q-Learning.
             Params
             ======
@@ -88,63 +89,71 @@ class Environment(object):
                 eps_decay (float): multiplicative factor (per episode) for decreasing epsilon
             """
         scores = []  # list containing scores from each episode
+        moving_average_scores = []
         scores_window = deque(maxlen=100)  # last 100 scores
-        use_ou_noise = True
+        noise = 0.1
 
         lr_decay = 0.98
-        actor_scheduler = ExponentialLR(self._agent.get_actor_optimizer(), gamma=lr_decay)
-        critic_scheduler = ExponentialLR(self._agent.get_critic_optimizer(), gamma=lr_decay)
+        # actor_scheduler = ExponentialLR(self._multi_agents.get_actor_optimizer(), gamma=lr_decay)
+        # critic_scheduler = ExponentialLR(self._multi_agents.get_critic_optimizer(), gamma=lr_decay)
 
-        print("use_noise:", use_ou_noise)
+        print("use_noise:", noise)
 
         for i_episode in range(1, n_episodes + 1):
             env_info = self._env.reset(train_mode=True)[self._brain_name]
-            self._agent.reset()
+            self._multi_agents.reset()
             states = get_next_states(env_info)
-            score = 0
+            score = np.zeros((2,1))
             for t in range(max_t):
-                action = self._agent.act(states, use_ou_noise, i_episode)
-                env_info = self._env.step(action)[self._brain_name]  # send the action to the environment
+                actions = self._multi_agents.act(states, i_episode, noise)
+                env_info = self._env.step(actions)[self._brain_name]  # send the action to the environment
                 next_states, rewards, dones = get_env_step_results(env_info)
-                self._agent.step(states, action, rewards, next_states, dones)
-                score += np.mean(rewards)  # update the score
+                feed_in_rewards = rewards
+                if self._share_rewards:
+                    feed_in_rewards = np.mean(rewards)*np.ones((2,1))
+                self._multi_agents.step(states, np.asarray(actions), feed_in_rewards, next_states, dones)
+                score += rewards  # update the score
                 states = next_states  # roll over the state to next time step
                 if dones.any():
                     break
-            actor_scheduler.step()
-            critic_scheduler.step()
+            # actor_scheduler.step()
+            # critic_scheduler.step()
+            max_score=np.max(score)
 
-            scores_window.append(score)  # save most recent score
-            scores.append(score)  # save most recent score
-            print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_window)), end="")
+            scores_window.append(max_score)  # save most recent score
+            scores.append(max_score)  # save most recent score
+            mean_score = np.mean(scores_window)
+            moving_average_scores.append(mean_score)
             if i_episode % 100 == 0:
-                print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_window)))
+                print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, mean_score))
             if i_episode > 100 and np.mean(scores_window) >= min_score:
                 print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i_episode,
                                                                                              np.mean(scores_window)))
-                torch.save(self._agent._actor_target.state_dict(), 'actor.pth')
+                self._multi_agents.save_models()
                 break
 
-        return scores
+        return scores, moving_average_scores
 
 
-def plot_scores(scores):
+def plot_scores(scores, moving_average_scores):
     # plot the scores
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    plt.plot(np.arange(len(scores)), scores)
+    plt.plot(np.arange(len(scores)), scores, label='scores')
+    plt.plot(np.arange(len(moving_average_scores)), moving_average_scores, label='moving average')
+    plt.legend()
     plt.ylabel('Score')
     plt.xlabel('Episode #')
-    plt.savefig("ddpg_score.png")
+    plt.savefig("maddpg_score.png")
     plt.show()
 
 
 def train(min_score, unity_env_file='Tennis_Linux/Tennis.x86_64'):
     env = Environment(UnityEnvironment(file_name=unity_env_file))
-    scores = env.train(min_score)
-    plot_scores(scores)
+    scores, moving_average_scores = env.train(min_score)
+    plot_scores(scores, moving_average_scores)
     env.close()
 
 
 if __name__ == "__main__":
-    train(min_score=30)
+    train(min_score=0.5)
