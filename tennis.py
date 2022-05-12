@@ -4,7 +4,6 @@ from collections import deque
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from torch.optim.lr_scheduler import ExponentialLR
 from unityagents import UnityEnvironment
 
 from multi_agents import MultiAgents
@@ -59,7 +58,7 @@ class Environment(object):
         self._multi_agents.load_actor_model(actor_model)
         scores = []
         for i in range(num_episode):
-            env_info = self._env.reset(train_mode=False)[self._brain_name]
+            env_info = self._env.step(train_mode=False)[self._brain_name]
             states = get_next_states(env_info)
             score = 0
             for j in range(steps_per_episode):
@@ -78,7 +77,7 @@ class Environment(object):
     def close(self):
         self._env.close()
 
-    def train(self, min_score, n_episodes=3000, max_t=1000):
+    def train(self, min_score, n_episodes=10000, max_t=1000):
         """Deep Q-Learning.
             Params
             ======
@@ -91,17 +90,12 @@ class Environment(object):
         scores = []  # list containing scores from each episode
         moving_average_scores = []
         scores_window = deque(maxlen=100)  # last 100 scores
-        noise = 0.1
-
-        lr_decay = 0.98
-        # actor_scheduler = ExponentialLR(self._multi_agents.get_actor_optimizer(), gamma=lr_decay)
-        # critic_scheduler = ExponentialLR(self._multi_agents.get_critic_optimizer(), gamma=lr_decay)
+        noise = 0.5
 
         print("use_noise:", noise)
 
         for i_episode in range(1, n_episodes + 1):
             env_info = self._env.reset(train_mode=True)[self._brain_name]
-            self._multi_agents.reset()
             states = get_next_states(env_info)
             score = np.zeros((2,1))
             for t in range(max_t):
@@ -111,13 +105,12 @@ class Environment(object):
                 feed_in_rewards = rewards
                 if self._share_rewards:
                     feed_in_rewards = np.mean(rewards)*np.ones((2,1))
-                self._multi_agents.step(states, np.asarray(actions), feed_in_rewards, next_states, dones)
+                self._multi_agents.learn_step(states, np.asarray(actions), feed_in_rewards, next_states, dones)
                 score += rewards  # update the score
                 states = next_states  # roll over the state to next time step
                 if dones.any():
                     break
-            # actor_scheduler.step()
-            # critic_scheduler.step()
+            self._multi_agents.step(i_episode)
             max_score=np.max(score)
 
             scores_window.append(max_score)  # save most recent score
@@ -126,9 +119,9 @@ class Environment(object):
             moving_average_scores.append(mean_score)
             if i_episode % 100 == 0:
                 print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, mean_score))
-            if i_episode > 100 and np.mean(scores_window) >= min_score:
+            if i_episode > 100 and mean_score >= min_score:
                 print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i_episode,
-                                                                                             np.mean(scores_window)))
+                                                                                             mean_score))
                 self._multi_agents.save_models()
                 break
 

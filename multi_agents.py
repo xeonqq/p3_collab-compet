@@ -9,11 +9,12 @@ BATCH_SIZE = 64  # minibatch size
 
 
 class MultiAgents(object):
-    def __init__(self, n_agents, state_dim, action_dim, seed=42):
-        self._agents = [DDPG_Agent(state_dim, action_dim, agent_id, n_agents) for agent_id in range(n_agents)]
+    def __init__(self, n_agents, state_dim, action_dim, seed=1):
+        self._agents = [DDPG_Agent(state_dim, action_dim, agent_id, n_agents, seed) for agent_id in range(n_agents)]
         self._replay_buffer = ReplayBuffer(BUFFER_SIZE, BATCH_SIZE, seed)
         self._n_agents = n_agents
         self._action_dim = action_dim
+        self._n_updates=2
 
     def _get_exp_values_by_agent(self, values, agent_id):
         return values[agent_id::self._n_agents, :]
@@ -27,9 +28,13 @@ class MultiAgents(object):
         actions = [agent.act(obs, i_episode, noise) for agent, obs in zip(self._agents, obs_all_agents)]
         return actions
 
-    def reset(self):
+    def step(self, n_episode):
         for agent in self._agents:
-            agent.reset()
+            agent.reset_noise(n_episode)
+
+        if len(self._replay_buffer) > BATCH_SIZE:
+            for agent in self._agents:
+                agent.step_scheduler(n_episode)
 
     def _actions_local(self, states, current_agent):
         actions = torch.empty(
@@ -77,11 +82,11 @@ class MultiAgents(object):
         for agent in self._agents:
             agent.soft_update_target_weights()
 
-    def step(self, states, actions, rewards, next_states, dones):
+    def learn_step(self, states, actions, rewards, next_states, dones):
         experience = (states, actions, rewards, next_states, dones)
         self._replay_buffer.add(experience)
         # Learn, if enough samples are available in memory
         if len(self._replay_buffer) > BATCH_SIZE:
             # if self._t % self._update_interval == 0:
-            #     for _ in range(self._n_updates):
-            self._learn()
+            for _ in range(self._n_updates):
+                self._learn()
