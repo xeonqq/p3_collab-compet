@@ -54,15 +54,15 @@ class Environment(object):
         self._multi_agents = MultiAgents(len(self._env_info.agents), self._state_size, self._action_size)
         self._share_rewards = False
 
-    def run_model(self, actor_model, num_episode=3, steps_per_episode=1000):
-        self._multi_agents.load_actor_model(actor_model)
+    def run_model(self, actor_models, num_episode=3, steps_per_episode=1000):
+        self._multi_agents.load_actor_models(actor_models)
         scores = []
         for i in range(num_episode):
-            env_info = self._env.step(train_mode=False)[self._brain_name]
+            env_info = self._env.reset(train_mode=False)[self._brain_name]
             states = get_next_states(env_info)
             score = 0
             for j in range(steps_per_episode):
-                actions = self._multi_agents.act(states, False, i)
+                actions = self._multi_agents.act(states, i, 0)
                 env_info = self._env.step(actions)[self._brain_name]  # send the action to the environment
                 next_states, rewards, dones = get_env_step_results(env_info)
                 score += np.mean(rewards)  # update the score

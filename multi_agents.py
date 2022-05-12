@@ -28,6 +28,10 @@ class MultiAgents(object):
         actions = [agent.act(obs, i_episode, noise) for agent, obs in zip(self._agents, obs_all_agents)]
         return actions
 
+    def load_actor_models(self, models):
+        for agent, model in zip(self._agents, models):
+            agent.load_actor_model(model)
+
     def step(self, n_episode):
         for agent in self._agents:
             agent.reset_noise(n_episode)
