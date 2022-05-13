@@ -2,48 +2,51 @@
 
 ## Learning Algorithm
 
-In this project, the agent's goal is to follow a moving target as long as possible. The agent has full access to the
-state (33 variables) of the environment, and 4 continuous movements as its actions. Through interacting with the
-environment, the agent receives positive rewards when reaches the target.
+In this project, there are two agents, the goal is play tennis with each other and keep the ball in the air as long as possible. Each agent has its own state observation (24 variables) of the environment, 
+and 2 continuous movements as its actions. Through interacting with the
+environment, the agent receives positive reward (+0.1) when it hits the ball over the net, and -0.1 reward when the ball touches the ground or go out of bound.
 
-In this project, we deploy the actor-critic strategy, where we use two neural networks (actor and critic). As described
-in the [ddpg paper](https://arxiv.org/abs/1509.02971). The actor network, uses the policy gradient technique to predict
-the actions directly from current observed state. On the other hand, the critic network try to estimate the Q-value,
-where input is the observed state and the actions, output is the Q value. The actor network is having low bias and high
-variance, while the critic network is having high bias due to the dependence to temperal difference, but low variance.
-Combining both networks, combines the best of two worlds, low bias and low variance.
+In this project, we deploy the multi-agent DDPG strategy, where each agent has its own individual actor-critic network. As described
+in the [maddpg paper](https://proceedings.neurips.cc/paper/2017/file/68a9750337a418a86fe06c1991a1d64c-Paper.pdf). This framework uses 
+centralized training with decentralized execution.
+![multi-agent decentralized actor, centralized critic approach](https://production-media.paperswithcode.com/methods/Screen_Shot_2020-06-04_at_10.11.20_PM.png)
+It means during training, the critic will have the states and actions combined from both agents as input (24x2+2x2=52 variables) to the critic network, 
+and output a single expected Q value. At the same time,
+the actor takes only agent's own observation (24 variables) to generate an action (2 variables). 
+This allows the policies to use extra information to ease training, so long as this information is not used at test time.
 
-In the project, the 20 agent unity environment is used. Detailed algorithm refer to "Algorithm 1 DDPG algorithm"
-in [ddpg paper](https://arxiv.org/abs/1509.02971).
+During training, the agents are set to be competitive. It means the rewards will not be shared. It results in faster training than cooperative scheme.
+A Ornstein-Uhlenbeck process with a decay of 0.98 is used to enhance exploration of the agents at the beginning to ease training
 
-Different from the original algorithm, instead using Ornstein-Uhlenbeck process to model the noise for actions, a 0
-centered Gaussian distributed noise with std-dev 0.05. The noise will decay exponentially with 0.99 every episode.
+BatchNorm is used at the beginning of each network, and gradient clipping of 0.1 is used for the actor network, 
+which improves the stability during training.
 
 Hyperparameters:
 
 ```python
-BUFFER_SIZE = int(1e5)  # replay buffer size
+BUFFER_SIZE = int(1e6)  # replay buffer size
 BATCH_SIZE = 64  # minibatch size
+NUM_UPDATE_PER_CYCLE = 2 # number of batch updates per cycle
 GAMMA = 0.99  # discount factor
 TAU = 1e-3  # for soft update of target parameters
-LR_ACTOR = 5.e-4  # learning rate of the actor
-LR_CRITIC = 5.e-3  # learning rate of the critic
-exponential_learning_decay = 0.98  # for both actor and critic networks
+LR_ACTOR = 3.e-3  # learning rate of the actor
+LR_CRITIC = 3.e-4  # learning rate of the critic
+exponential_learning_decay = 0.999  # for both actor and critic networks
+
+OU_noise_theta =0.5
+OU_noise_sigma=0.1
 ```
 
 #### Actor-Critic Network Architectures
 
-Actor network:
-![Actor network](network_diagrams/actor.png)
-
-Critic Network:
-![Critic network](network_diagrams/critic.png)
+Actor network (left) and Critic network (right) for both agents
+![network architecture](network_diagrams/network_arch.png)
 
 ### Plot of Rewards
 
-The training will terminate once average score reaches 30 over +100 episodes.
+The training will terminate once average score (taking the maximum of both agents) reaches 0.5 over +100 episodes.
 
-The network converges in **36** episodes, and kept stably at the score of ~35.
+The network converges in **4300** episodes.
 
 The score per episode during training:
 
@@ -53,24 +56,11 @@ The score per episode during training:
 
 Runing the trained model with no exploration noise
 
-![](result_demo.gif)
+![](demo.gif)
 
-It reaches score of 38 at the end of the episode
-
-### Progress during the project
-- Version 0: Implemented the algorithm one to one from DDPG paper, 400x300 for hidden layer, same param, doesn't learn, the score is always below 1
-- Version 1: Changed a different seed, remove L2 weight decay for critic network. The agent is learning, but score reach 7 then drop
-sharply. See [commit](https://github.com/xeonqq/p2_continous_control/blob/51843209594a746ad9d48b38584ec8a29aece396/ddpg_score.png).
-- Version 2: Since the learning is not stable, I reduced the replay buffer size, and also try to reduce learning rate to 1e-5 and 1e-4 for actor and critic network. At the same time
- Added one hidden layer to both network. And for critic network, feed action directly at the input layer together with state. Then the 
-network is steadily learning till score of 14 at episode 150, but learning is too slow.
-See [commit](https://github.com/xeonqq/p2_continous_control/commit/5d5c240d20db83ab6ae75ae614a704b009bd4f9c)
-- Version 3 (final): increase learning rate  to 5e-5 and 5e-4 for actor and critic network, but add lr decay to ensure steady learning at the end. At the same time,
-reduce the number of neurons in the hidden layers. Those changes helped a lot, which results in the final version. see [commit](https://github.com/xeonqq/p2_continous_control/commit/57086a8ae904760b4f46910f96396d09517d070a)
 ### Ideas for Future Work
 
-- A huge amount of time was spent tuning hyper-parameters, a small change would result in big difference. Apply grid
-  search to tune them systematically.
-- Use priority reply buffer
-- In the course PPO and A3C are also introduced, but for discrete action space. I wonder how they can be also used in
-  continuous space.
+- A huge amount of time was spent tuning hyper-parameters. In the end, training still takes too much episodes to converge.
+ By further tuning the network architecture and hyperparameter, could further decrease training time. 
+- The environment is symmetric, so if the state variable can be more understandable, we can use just one actor-critic network for both agents, by
+flipping the state and action variable in someway. It will result in the agent play with himself, and in the end ease the training process.

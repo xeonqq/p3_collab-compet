@@ -36,7 +36,26 @@ The environment is considered solved, when the average (over 100 episodes) of th
     (_For AWS_) If you'd like to train the agent on AWS (and have not [enabled a virtual screen](https://github.com/Unity-Technologies/ml-agents/blob/master/docs/Training-on-Amazon-Web-Service.md)), then please use [this link](https://s3-us-west-1.amazonaws.com/udacity-drlnd/P3/Tennis/Tennis_Linux_NoVis.zip) to obtain the "headless" version of the environment.  You will **not** be able to watch the agent without enabling a virtual screen, but you will be able to train the agent.  (_To watch the agent, you should follow the instructions to [enable a virtual screen](https://github.com/Unity-Technologies/ml-agents/blob/master/docs/Training-on-Amazon-Web-Service.md), and then download the environment for the **Linux** operating system above._)
 
 2. Place the file in the DRLND GitHub repository, in the `p3_collab-compet/` folder, and unzip (or decompress) the file. 
+3. 
+4. Install dependencies with
+```bash
+ pip3 install -r requirements.txt
+```
 
+
+### Running the training
+```bash
+python3 tennis.py
+```
+Unity Gui will pop up and demonstate the learning process, two checkpoint files will be generated at the end of the training
+for both agents
+
+### Running the model
+Two pre-trained model checkpoint files are provided to run the two agents, simply run:
+
+```bash
+python3 run_model.py
+```
 ### Instructions
 
 Follow the instructions in `Tennis.ipynb` to get started with training your own agent!  
